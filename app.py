@@ -32,7 +32,6 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
-
 def scan_document(img):
     orig = img.copy()
     ratio = img.shape[0] / 500.0
@@ -40,7 +39,6 @@ def scan_document(img):
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5,5), 0)
 
-    # Threshold adaptif biar deteksi lebih kuat
     thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
     edged = cv2.Canny(thresh, 75, 200)
 
@@ -55,13 +53,11 @@ def scan_document(img):
             screenCnt = approx
             break
 
-    if screenCnt is None:
-        return img # fallback kalau gagal deteksi
+    if screenCnt is None or len(screenCnt)!= 4:
+        return img
 
-    # Scale balik ke ukuran asli
-    screenCnt = screenCnt * ratio
+    screenCnt = screenCnt.reshape(4, 2) * ratio
 
-    # Lurusin rotasi
     rect = cv2.minAreaRect(screenCnt)
     angle = rect[-1]
     if angle < -45:
@@ -74,7 +70,6 @@ def scan_document(img):
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     rotated = cv2.warpAffine(orig, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-    # Crop perspektif
     gray_rot = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
     blur_rot = cv2.GaussianBlur(gray_rot, (5,5), 0)
     thresh_rot = cv2.adaptiveThreshold(blur_rot, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
@@ -82,14 +77,18 @@ def scan_document(img):
     cnts_rot, _ = cv2.findContours(edged_rot.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)[:5]
 
+    screenCnt2 = None
     for c in cnts_rot:
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
         if len(approx) == 4:
-            screenCnt = approx
+            screenCnt2 = approx.reshape(4, 2)
             break
 
-    warped = four_point_transform(rotated, screenCnt.reshape(4, 2))
+    if screenCnt2 is None:
+        return rotated
+
+    warped = four_point_transform(rotated, screenCnt2)
     return warped
 
 uploaded_files = st.file_uploader("Upload foto dokumen", type=["jpg", "jpeg", "png"], accept_multiple_files=True)
