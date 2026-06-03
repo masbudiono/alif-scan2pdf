@@ -99,7 +99,7 @@ if uploaded_files:
         gambar_temp.append(buf)
         st.image(pil_img, caption=file.name, use_container_width=True)
 
-    if st.button("Buat PDF"):
+        if st.button("Buat PDF"):
         pdf = FPDF(unit="pt")
         for img_buf in gambar_temp:
             img_buf.seek(0)
@@ -108,4 +108,4 @@ if uploaded_files:
             pdf.add_page(format=(w, h))
             pdf.image(img_buf, x=0, y=0, w=w, h=h)
         pdf_output = bytes(pdf.output())
-        st.download_button("Download PDF",
+        st.download_button("Download PDF", pdf_output, "scan.pdf", "application/pdf")
