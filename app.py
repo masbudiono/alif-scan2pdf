@@ -8,21 +8,45 @@ st.title("📄 Scan Foto jadi PDF A4")
 st.write("Upload foto dokumen, auto crop + lurusin, langsung jadi PDF")
 
 def scan_document(img):
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    edged = cv2.Canny(blur, 75, 200)
-    cnts = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    h, w = img.shape[:2]
+    orig = img.copy()
+
+    # Resize biar proses lebih cepat + stabil
+    ratio = 800.0 / max(h, w)
+    img_resized = cv2.resize(img, (int(w*ratio), int(h*ratio)))
+
+    gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5,5), 0)
+
+    # Pakai adaptive threshold biar tahan sama bayangan
+    thresh = cv2.adaptiveThreshold(gray, 255,
+                                   cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                   cv2.THRESH_BINARY_INV, 11, 2)
+
+    cnts = cv2.findContours(thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts = cnts[0] if len(cnts) == 2 else cnts[1]
-    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
+
+    # Cari kontur segi-4 terbesar yang mirip rasio A4
     screenCnt = None
+    max_area = 0
     for c in cnts:
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+
         if len(approx) == 4:
-            screenCnt = approx
-            break
+            area = cv2.contourArea(c)
+            # Cek rasio aspek biar nggak kejebak logo kotak kecil
+            x,y,cw,ch = cv2.boundingRect(approx)
+            aspect = cw / float(ch)
+            if area > max_area and 0.5 < aspect < 2.0 and area > 10000:
+                max_area = area
+                screenCnt = approx
+
     if screenCnt is not None:
+        # Scale balik ke ukuran asli
+        screenCnt = screenCnt / ratio
         pts = screenCnt.reshape(4, 2)
+
         rect = np.zeros((4, 2), dtype="float32")
         s = pts.sum(axis=1)
         rect[0] = pts[np.argmin(s)]
@@ -30,6 +54,7 @@ def scan_document(img):
         diff = np.diff(pts, axis=1)
         rect[1] = pts[np.argmin(diff)]
         rect[3] = pts[np.argmax(diff)]
+
         (tl, tr, br, bl) = rect
         widthA = np.sqrt(((br[0] - bl[0])**2) + ((br[1] - bl[1])**2))
         widthB = np.sqrt(((tr[0] - tl[0])**2) + ((tr[1] - tl[1])**2))
@@ -37,10 +62,13 @@ def scan_document(img):
         heightA = np.sqrt(((tr[0] - br[0])**2) + ((tr[1] - br[1])**2))
         heightB = np.sqrt(((tl[0] - bl[0])**2) + ((tl[1] - bl[1])**2))
         maxHeight = max(int(heightA), int(heightB))
+
         dst = np.array([[0,0],[maxWidth-1,0],[maxWidth-1,maxHeight-1],[0,maxHeight-1]], dtype="float32")
         M = cv2.getPerspectiveTransform(rect, dst)
-        warp = cv2.warpPerspective(img, M, (maxWidth, maxHeight))
+        warp = cv2.warpPerspective(orig, M, (maxWidth, maxHeight))
         return warp
+
+    return orig # kalau gagal, balikin gambar asli biar nggak ke crop aneh
     return img
 
 uploaded_files = st.file_uploader("Upload foto dokumen, bisa banyak sekaligus",
