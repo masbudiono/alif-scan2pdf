@@ -32,6 +32,7 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
+
 def scan_document(img):
     orig = img.copy()
     ratio = img.shape[0] / 500.0
@@ -56,7 +57,7 @@ def scan_document(img):
     if screenCnt is None or len(screenCnt)!= 4:
         return img
 
-    screenCnt = screenCnt.reshape(4, 2) * ratio
+    screenCnt = screenCnt.reshape(4, 2).astype("float32") * ratio
 
     rect = cv2.minAreaRect(screenCnt)
     angle = rect[-1]
@@ -82,7 +83,7 @@ def scan_document(img):
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
         if len(approx) == 4:
-            screenCnt2 = approx.reshape(4, 2)
+            screenCnt2 = approx.reshape(4, 2).astype("float32")
             break
 
     if screenCnt2 is None:
