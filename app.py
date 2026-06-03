@@ -34,35 +34,27 @@ def four_point_transform(image, pts):
 
 def scan_document(img):
     orig = img.copy()
-    ratio = img.shape[0] / 1000.0
-    img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 1000))
+    ratio = img.shape[0] / 1200.0
+    img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 1200))
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
-    gray = cv2.GaussianBlur(gray, (7,7), 0)
+    gray = cv2.GaussianBlur(gray, (9,9), 0)
 
-    # Trik utama: cari area putih paling gede
+    # Cari area putih, tutupin lubang
     _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((15,15), np.uint8))
+    thresh = cv2.morphologyEx(thresh, cv2.MORPH_CLOSE, np.ones((25,25), np.uint8))
 
     cnts, _ = cv2.findContours(thresh.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts:
+        return img
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
-    screenCnt = None
-    for c in cnts:
-        peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
-        if len(approx) == 4:
-            area = cv2.contourArea(c)
-            if area > img_resized.shape[0] * img_resized.shape[1] * 0.3: # minimal 30% luas gambar
-                screenCnt = approx
-                break
+    # Ambil contour terbesar, langsung pakai minAreaRect buat lurusin
+    biggest = cnts[0]
+    rect = cv2.minAreaRect(biggest)
+    box = cv2.boxPoints(rect)
+    box = box.astype("float32") * ratio
 
-    if screenCnt is None:
-        return img # gagal = balikin asli
-
-    screenCnt = screenCnt.reshape(4, 2).astype("float32") * ratio
-
-    # Lurusin dulu
-    rect = cv2.minAreaRect(screenCnt)
+    # Lurusin berdasarkan angle dari minAreaRect
     angle = rect[-1]
     if angle < -45:
         angle = -(90 + angle)
@@ -74,11 +66,13 @@ def scan_document(img):
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     rotated = cv2.warpAffine(orig, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-    # Crop setelah lurus
+    # Setelah lurus, baru coba crop 4 titik
     gray_rot = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
     _, thresh_rot = cv2.threshold(gray_rot, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
-    thresh_rot = cv2.morphologyEx(thresh_rot, cv2.MORPH_CLOSE, np.ones((15,15), np.uint8))
+    thresh_rot = cv2.morphologyEx(thresh_rot, cv2.MORPH_CLOSE, np.ones((25,25), np.uint8))
     cnts_rot, _ = cv2.findContours(thresh_rot.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    if not cnts_rot:
+        return rotated
     cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)
 
     screenCnt2 = None
@@ -87,12 +81,12 @@ def scan_document(img):
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
         if len(approx) == 4:
             area = cv2.contourArea(c)
-            if area > rotated.shape[0] * rotated.shape[1] * 0.3:
+            if area > rotated.shape[0] * rotated.shape[1] * 0.25:
                 screenCnt2 = approx.reshape(4, 2).astype("float32")
                 break
 
     if screenCnt2 is None:
-        return rotated
+        return rotated # kalau gagal crop, minimal udah lurus
 
     warped = four_point_transform(rotated, screenCnt2)
     return warped
