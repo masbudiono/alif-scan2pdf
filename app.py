@@ -35,13 +35,13 @@ def four_point_transform(image, pts):
 
 def scan_document(img):
     orig = img.copy()
-    ratio = img.shape[0] / 800.0 # naikin resolusi resize biar lebih presisi
+    ratio = img.shape[0] / 800.0
     img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 800))
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5,5), 0)
 
-    # Pakai Otsu threshold biar beda putih kertas vs gelap background lebih jelas
-    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    # Trik: invert threshold kalau background gelap
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     edged = cv2.Canny(thresh, 30, 150)
 
     cnts, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
@@ -50,10 +50,10 @@ def scan_document(img):
     screenCnt = None
     for c in cnts:
         peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.015 * peri, True) # 0.015 lebih ketat
+        approx = cv2.approxPolyDP(c, 0.015 * peri, True)
         if len(approx) == 4:
             area = cv2.contourArea(c)
-            if area > 10000: # skip contour kecil kayak logo, QR
+            if area > 10000:
                 screenCnt = approx
                 break
 
@@ -62,7 +62,6 @@ def scan_document(img):
 
     screenCnt = screenCnt.reshape(4, 2).astype("float32") * ratio
 
-    # Lurusin
     rect = cv2.minAreaRect(screenCnt)
     angle = rect[-1]
     if angle < -45:
@@ -75,9 +74,8 @@ def scan_document(img):
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
     rotated = cv2.warpAffine(orig, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
-    # Crop lagi setelah dilurusin
     gray_rot = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
-    _, thresh_rot = cv2.threshold(gray_rot, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    _, thresh_rot = cv2.threshold(gray_rot, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     edged_rot = cv2.Canny(thresh_rot, 30, 150)
     cnts_rot, _ = cv2.findContours(edged_rot.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)
