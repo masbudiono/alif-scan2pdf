@@ -74,9 +74,9 @@ if uploaded_files:
         st.image(pil_img, caption=file.name, use_container_width=True)
 
     if st.button("Buat PDF"):
-    pdf = FPDF(unit="mm", format="A4")
-    for img_buf in gambar_temp:
-        pdf.add_page()
-        pdf.image(img_buf, x=10, y=10, w=190)
-    pdf_output = bytes(pdf.output())
-    st.download_button("Download PDF", pdf_output, "scan.pdf", "application/pdf")
+        pdf = FPDF(unit="mm", format="A4")
+        for img_buf in gambar_temp:
+            pdf.add_page()
+            pdf.image(img_buf, x=10, y=10, w=190)
+        pdf_output = bytes(pdf.output())
+        st.download_button("Download PDF", pdf_output, "scan.pdf", "application/pdf")
