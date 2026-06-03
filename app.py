@@ -54,8 +54,12 @@ def scan_document(img):
             screenCnt = approx
             break
 
-    if screenCnt is None or len(screenCnt)!= 4:
-        return img
+    # Kalau gagal deteksi 4 titik, ambil contour terbesar aja
+    if screenCnt is None:
+        if len(cnts) > 0:
+            screenCnt = cv2.approxPolyDP(cnts[0], 0.02 * cv2.arcLength(cnts[0], True), True)
+        else:
+            return img # bener2 nggak ketemu apa2
 
     screenCnt = screenCnt.reshape(4, 2).astype("float32") * ratio
 
@@ -87,7 +91,10 @@ def scan_document(img):
             break
 
     if screenCnt2 is None:
-        return rotated
+        if len(cnts_rot) > 0:
+            screenCnt2 = cv2.approxPolyDP(cnts_rot[0], 0.02 * cv2.arcLength(cnts_rot[0], True), True).reshape(4, 2).astype("float32")
+        else:
+            return rotated
 
     warped = four_point_transform(rotated, screenCnt2)
     return warped
