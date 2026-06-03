@@ -74,11 +74,12 @@ if uploaded_files:
         st.image(pil_img, caption=file.name, use_container_width=True)
 
     if st.button("Buat PDF"):
-    pdf = FPDF(unit="pt")  # pakai pt biar 1:1 sama pixel
-    for img_buf in gambar_temp:
-        img = Image.open(img_buf)
-        w, h = img.size
-        pdf.add_page(format=(w, h))  # ukuran halaman = ukuran foto
-        pdf.image(img_buf, x=0, y=0, w=w, h=h)  # tempel full tanpa margin
-    pdf_output = bytes(pdf.output())
-    st.download_button("Download PDF", pdf_output, "scan.pdf", "application/pdf")
+        pdf = FPDF(unit="pt")
+        for img_buf in gambar_temp:
+            img_buf.seek(0)
+            img = Image.open(img_buf)
+            w, h = img.size
+            pdf.add_page(format=(w, h))
+            pdf.image(img_buf, x=0, y=0, w=w, h=h)
+        pdf_output = bytes(pdf.output())
+        st.download_button("Download PDF", pdf_output, "scan.pdf", "application/pdf")
