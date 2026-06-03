@@ -32,13 +32,21 @@ def four_point_transform(image, pts):
     warped = cv2.warpPerspective(image, M, (maxWidth, maxHeight))
     return warped
 
+
 def scan_document(img):
     orig = img.copy()
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-    blur = cv2.GaussianBlur(gray, (5,5), 0)
-    edged = cv2.Canny(blur, 75, 200)
+    ratio = img.shape[0] / 500.0
+    img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 500))
+    gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
+    gray = cv2.GaussianBlur(gray, (5,5), 0)
+
+    # Threshold adaptif biar deteksi lebih kuat
+    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    edged = cv2.Canny(thresh, 75, 200)
+
     cnts, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
+
     screenCnt = None
     for c in cnts:
         peri = cv2.arcLength(c, True)
@@ -46,29 +54,41 @@ def scan_document(img):
         if len(approx) == 4:
             screenCnt = approx
             break
+
     if screenCnt is None:
-        return img
+        return img # fallback kalau gagal deteksi
+
+    # Scale balik ke ukuran asli
+    screenCnt = screenCnt * ratio
+
+    # Lurusin rotasi
     rect = cv2.minAreaRect(screenCnt)
     angle = rect[-1]
     if angle < -45:
         angle = -(90 + angle)
     else:
         angle = -angle
-    (h, w) = img.shape[:2]
+
+    (h, w) = orig.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)
-    rotated = cv2.warpAffine(img, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    rotated = cv2.warpAffine(orig, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+
+    # Crop perspektif
     gray_rot = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
     blur_rot = cv2.GaussianBlur(gray_rot, (5,5), 0)
-    edged_rot = cv2.Canny(blur_rot, 75, 200)
+    thresh_rot = cv2.adaptiveThreshold(blur_rot, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
+    edged_rot = cv2.Canny(thresh_rot, 75, 200)
     cnts_rot, _ = cv2.findContours(edged_rot.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)[:5]
+
     for c in cnts_rot:
         peri = cv2.arcLength(c, True)
         approx = cv2.approxPolyDP(c, 0.02 * peri, True)
         if len(approx) == 4:
             screenCnt = approx
             break
+
     warped = four_point_transform(rotated, screenCnt.reshape(4, 2))
     return warped
 
