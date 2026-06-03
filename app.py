@@ -35,31 +35,30 @@ def four_point_transform(image, pts):
 
 def scan_document(img):
     orig = img.copy()
-    ratio = img.shape[0] / 500.0
-    img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 500))
+    ratio = img.shape[0] / 800.0
+    img_resized = cv2.resize(img, (int(img.shape[1]/ratio), 800))
     gray = cv2.cvtColor(img_resized, cv2.COLOR_BGR2GRAY)
     gray = cv2.GaussianBlur(gray, (5,5), 0)
 
-    thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    edged = cv2.Canny(thresh, 75, 200)
+    # Trik: invert threshold kalau background gelap
+    _, thresh = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    edged = cv2.Canny(thresh, 30, 150)
 
-    cnts, _ = cv2.findContours(edged.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)[:5]
+    cnts, _ = cv2.findContours(edged.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts = sorted(cnts, key=cv2.contourArea, reverse=True)
 
     screenCnt = None
     for c in cnts:
         peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        approx = cv2.approxPolyDP(c, 0.015 * peri, True)
         if len(approx) == 4:
-            screenCnt = approx
-            break
+            area = cv2.contourArea(c)
+            if area > 10000:
+                screenCnt = approx
+                break
 
-    # Kalau gagal deteksi 4 titik, ambil contour terbesar aja
     if screenCnt is None:
-        if len(cnts) > 0:
-            screenCnt = cv2.approxPolyDP(cnts[0], 0.02 * cv2.arcLength(cnts[0], True), True)
-        else:
-            return img # bener2 nggak ketemu apa2
+        return img
 
     screenCnt = screenCnt.reshape(4, 2).astype("float32") * ratio
 
@@ -76,25 +75,23 @@ def scan_document(img):
     rotated = cv2.warpAffine(orig, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
 
     gray_rot = cv2.cvtColor(rotated, cv2.COLOR_BGR2GRAY)
-    blur_rot = cv2.GaussianBlur(gray_rot, (5,5), 0)
-    thresh_rot = cv2.adaptiveThreshold(blur_rot, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY, 11, 2)
-    edged_rot = cv2.Canny(thresh_rot, 75, 200)
-    cnts_rot, _ = cv2.findContours(edged_rot.copy(), cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)[:5]
+    _, thresh_rot = cv2.threshold(gray_rot, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    edged_rot = cv2.Canny(thresh_rot, 30, 150)
+    cnts_rot, _ = cv2.findContours(edged_rot.copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    cnts_rot = sorted(cnts_rot, key=cv2.contourArea, reverse=True)
 
     screenCnt2 = None
     for c in cnts_rot:
         peri = cv2.arcLength(c, True)
-        approx = cv2.approxPolyDP(c, 0.02 * peri, True)
+        approx = cv2.approxPolyDP(c, 0.015 * peri, True)
         if len(approx) == 4:
-            screenCnt2 = approx.reshape(4, 2).astype("float32")
-            break
+            area = cv2.contourArea(c)
+            if area > 10000:
+                screenCnt2 = approx.reshape(4, 2).astype("float32")
+                break
 
     if screenCnt2 is None:
-        if len(cnts_rot) > 0:
-            screenCnt2 = cv2.approxPolyDP(cnts_rot[0], 0.02 * cv2.arcLength(cnts_rot[0], True), True).reshape(4, 2).astype("float32")
-        else:
-            return rotated
+        return rotated
 
     warped = four_point_transform(rotated, screenCnt2)
     return warped
